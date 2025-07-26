@@ -4,11 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/generative-ai-go/genai"
-	"github.com/user/discord-notetaker/internal/audio"
 	"github.com/rs/zerolog/log"
+	"github.com/user/discord-notetaker/internal/audio"
 	"google.golang.org/api/option"
 )
 
@@ -37,10 +36,10 @@ func (g *GeminiSummariser) Summarise(ctx context.Context, utterances []audio.Utt
 
 	// Convert utterances to transcript text
 	transcript := g.buildTranscript(utterances)
-	
+
 	// Generate summary using Gemini
 	prompt := g.buildPrompt(transcript)
-	
+
 	genModel := g.client.GenerativeModel(g.model)
 	resp, err := genModel.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
@@ -68,18 +67,18 @@ func (g *GeminiSummariser) Summarise(ctx context.Context, utterances []audio.Utt
 
 func (g *GeminiSummariser) buildTranscript(utterances []audio.Utterance) string {
 	var transcript strings.Builder
-	
+
 	for _, utterance := range utterances {
 		timestamp := utterance.TSStart.Format("15:04:05")
 		speaker := utterance.UserTag
 		if speaker == "" {
 			speaker = "Unknown"
 		}
-		
-		transcript.WriteString(fmt.Sprintf("[%s] %s: %s\n", 
+
+		transcript.WriteString(fmt.Sprintf("[%s] %s: %s\n",
 			timestamp, speaker, utterance.Text))
 	}
-	
+
 	return transcript.String()
 }
 

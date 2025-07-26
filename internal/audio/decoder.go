@@ -8,7 +8,7 @@ import (
 
 const (
 	SampleRate = 48000
-	Channels   = 1 // Mono
+	Channels   = 1   // Mono
 	FrameSize  = 960 // 20ms at 48kHz
 )
 
@@ -43,7 +43,5 @@ func (d *OpusDecoder) Decode(opus []byte) ([]int16, error) {
 }
 
 func (d *OpusDecoder) Close() {
-	if d.decoder != nil {
-		d.decoder.Close()
-	}
+	// gopus decoder doesn't require explicit cleanup
 }

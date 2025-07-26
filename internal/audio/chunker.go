@@ -72,6 +72,11 @@ func (c *RingChunker) AddSamples(pcm []int16, timestamp time.Time, speakers []st
 
 	c.bufferPos += len(pcm)
 
+	// Ensure bufferPos doesn't exceed buffer length
+	if c.bufferPos > len(c.buffer) {
+		c.bufferPos = len(c.buffer)
+	}
+
 	// Check if it's time to create a chunk based on time or buffer fullness
 	if c.bufferPos >= c.chunkSamples {
 		c.createChunk()
@@ -136,16 +141,24 @@ func (c *RingChunker) createChunk() {
 func (c *RingChunker) slideBuffer() {
 	// Slide buffer by (chunkSamples - overlapSamples) to maintain overlap
 	slideAmount := c.chunkSamples - c.overlapSamples
-	
-	if slideAmount > 0 && slideAmount < len(c.buffer) {
+
+	// Ensure bufferPos is within valid bounds
+	if c.bufferPos > len(c.buffer) {
+		c.bufferPos = len(c.buffer)
+	}
+
+	if slideAmount > 0 && slideAmount < len(c.buffer) && slideAmount < c.bufferPos {
 		// Move remaining samples to beginning
-		copy(c.buffer, c.buffer[slideAmount:c.bufferPos])
-		copy(c.timestamps, c.timestamps[slideAmount:c.bufferPos])
-		copy(c.speakers, c.speakers[slideAmount:c.bufferPos])
-		
-		c.bufferPos -= slideAmount
+		remainingLen := c.bufferPos - slideAmount
+		if remainingLen > 0 {
+			copy(c.buffer, c.buffer[slideAmount:c.bufferPos])
+			copy(c.timestamps, c.timestamps[slideAmount:c.bufferPos])
+			copy(c.speakers, c.speakers[slideAmount:c.bufferPos])
+		}
+
+		c.bufferPos = remainingLen
 	} else {
-		// Start fresh if slide would remove everything
+		// Start fresh if slide would remove everything or if bounds are invalid
 		c.bufferPos = 0
 	}
 }

@@ -7,14 +7,13 @@ import (
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/rs/zerolog/log"
 	"github.com/user/discord-notetaker/internal/audio"
 	"github.com/user/discord-notetaker/internal/config"
+	"github.com/user/discord-notetaker/internal/store"
 	"github.com/user/discord-notetaker/internal/stt"
 	"github.com/user/discord-notetaker/internal/stt/deepgram"
-	"github.com/user/discord-notetaker/internal/stt/vosk"
-	"github.com/user/discord-notetaker/internal/store"
 	"github.com/user/discord-notetaker/internal/summariser/gemini"
-	"github.com/rs/zerolog/log"
 )
 
 type Bot struct {
@@ -54,15 +53,9 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 		return nil, fmt.Errorf("failed to create summariser: %w", err)
 	}
 
-	// Create transcriber based on config
+	// Create transcriber - only Deepgram supported in this build
 	var transcriber stt.Transcriber
-	switch cfg.STTBackend {
-	case "vosk":
-		transcriber, err = vosk.NewVoskTranscriber(cfg.VoskModelPath, audio.SampleRate)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Vosk transcriber: %w", err)
-		}
-	case "deepgram":
+	if cfg.STTBackend == "deepgram" {
 		transcriber = deepgram.NewDeepgramTranscriber(
 			cfg.DeepgramAPIKey,
 			cfg.DeepgramTier,
@@ -70,8 +63,8 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 			cfg.DeepgramPunctuate,
 			cfg.DeepgramUtterances,
 		)
-	default:
-		return nil, fmt.Errorf("unsupported STT backend: %s", cfg.STTBackend)
+	} else {
+		return nil, fmt.Errorf("only 'deepgram' STT backend is supported in this build. Set STT_BACKEND=deepgram")
 	}
 
 	bot := &Bot{
@@ -143,7 +136,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 	// Check for commands
 	content := strings.TrimSpace(m.Content)
-	
+
 	switch {
 	case strings.HasPrefix(content, "!join"):
 		b.handleJoin(s, m)
@@ -186,7 +179,7 @@ func (b *Bot) handleJoin(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	// Create new session
 	sessionID := store.GenerateSessionID()
-	
+
 	// Create audio components
 	decoder, err := audio.NewOpusDecoder()
 	if err != nil {

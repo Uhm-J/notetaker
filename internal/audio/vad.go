@@ -7,7 +7,7 @@ import (
 )
 
 type WebRTCVAD struct {
-	vad         *webrtcvad.VAD
+	vad          *webrtcvad.VAD
 	rmsThreshold float64
 }
 
@@ -21,7 +21,7 @@ func NewWebRTCVAD() (*WebRTCVAD, error) {
 	vad.SetMode(2)
 
 	return &WebRTCVAD{
-		vad:         vad,
+		vad:          vad,
 		rmsThreshold: 500.0, // Fallback RMS threshold
 	}, nil
 }
@@ -29,7 +29,7 @@ func NewWebRTCVAD() (*WebRTCVAD, error) {
 func (v *WebRTCVAD) IsSpeech(pcm []int16, sampleRate int) bool {
 	// Convert to byte slice for WebRTC VAD
 	bytes := int16SliceToBytes(pcm)
-	
+
 	// WebRTC VAD expects specific frame sizes
 	if len(bytes) < 320 { // 10ms at 16kHz = 320 bytes
 		return v.rmsIsSpeech(pcm)
@@ -52,15 +52,13 @@ func (v *WebRTCVAD) rmsIsSpeech(pcm []int16) bool {
 	for _, sample := range pcm {
 		sum += float64(sample) * float64(sample)
 	}
-	
+
 	rms := math.Sqrt(sum / float64(len(pcm)))
 	return rms > v.rmsThreshold
 }
 
 func (v *WebRTCVAD) Close() error {
-	if v.vad != nil {
-		v.vad.Close()
-	}
+	// webrtcvad doesn't require explicit cleanup
 	return nil
 }
 
