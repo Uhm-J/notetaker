@@ -143,7 +143,7 @@ func (vs *VoiceSession) Start() error {
 	}
 
 	// Start processing goroutines
-	go vs.processAudio()
+	go vs.processAudioLoop()
 	go vs.processUtterances()
 
 	log.Info().
@@ -154,7 +154,25 @@ func (vs *VoiceSession) Start() error {
 	return nil
 }
 
-func (vs *VoiceSession) processAudio(packet *discordgo.Packet) {
+func (vs *VoiceSession) processAudioLoop() {
+	defer log.Debug().Str("session_id", vs.ID).Msg("Audio processing stopped")
+
+	for {
+		select {
+		case packet, ok := <-vs.voiceConn.OpusRecv:
+			if !ok {
+				log.Info().Str("session_id", vs.ID).Msg("Voice receive channel closed")
+				return
+			}
+			vs.processAudioPacket(packet)
+		case <-vs.ctx.Done():
+			log.Info().Str("session_id", vs.ID).Msg("Audio processing context cancelled")
+			return
+		}
+	}
+}
+
+func (vs *VoiceSession) processAudioPacket(packet *discordgo.Packet) {
 	if vs.stopped {
 		return
 	}
@@ -166,7 +184,7 @@ func (vs *VoiceSession) processAudio(packet *discordgo.Packet) {
 		Msg("Processing audio packet")
 
 	// Decode Opus to PCM
-	pcm, err := vs.decoder.Decode(packet.Opus, 960, false)
+	pcm, err := vs.decoder.Decode(packet.Opus)
 	if err != nil {
 		log.Warn().
 			Str("session_id", vs.ID).
@@ -177,7 +195,7 @@ func (vs *VoiceSession) processAudio(packet *discordgo.Packet) {
 	}
 
 	// Apply VAD
-	if !vs.vad.Process(pcm) {
+	if !vs.vad.IsSpeech(pcm, 48000) {
 		log.Debug().
 			Str("session_id", vs.ID).
 			Uint32("ssrc", packet.SSRC).
@@ -191,18 +209,19 @@ func (vs *VoiceSession) processAudio(packet *discordgo.Packet) {
 		Int("pcm_samples", len(pcm)).
 		Msg("VAD detected speech - processing packet")
 
-	// Get current speakers for this SSRC
+		// Get current speakers for this SSRC
 	speakers := vs.getCurrentSpeakers(packet.SSRC)
-	
+
 	log.Info().
 		Str("session_id", vs.ID).
 		Uint32("ssrc", packet.SSRC).
 		Strs("speakers", speakers).
 		Msg("SSRC mapped to speakers")
 
-	// Add to chunker
+	// Get or create chunker for this SSRC and add samples
+	chunker := vs.getOrCreateChunkerForSSRC(packet.SSRC)
 	timestamp := time.Now()
-	vs.chunkerTemplate.AddSamples(pcm, timestamp, speakers)
+	chunker.AddSamples(pcm, timestamp, speakers)
 
 }
 
