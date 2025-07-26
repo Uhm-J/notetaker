@@ -1,0 +1,43 @@
+# .cursor-rules
+
+## Project & code rules
+
+1. **Interfaces first.** Code to the `Transcriber` and `Summariser` interfaces. Backends live behind those boundaries.
+2. **Context everywhere.** Any call that can block or reach the network accepts `context.Context` and honors deadlines.
+3. **No global state** except immutable config and loggers.
+4. **Deterministic chunking.** Chunker is the single source of truth for timestamps; STT results are aligned back onto chunk start times.
+5. **Bounded resources.** All queues are bounded. When full, drop overlap first, then coalesce adjacent silence.
+6. **Idempotency.** Re‑running a session should not duplicate uploads; name artifacts by `sessionID`.
+7. **Error policy.** Return rich errors. Only the command handler decides what to show to users.
+8. **Testing.** Provide golden tests for: chunker, diarization merge, Gemini prompts. Include fixtures with synthetic audio.
+9. **Logging.** Use structured logs with fields: `guild`, `channel`, `session`, `user`, `chunk`, `latency_ms`.
+10. **Security.** Tokens only via env. Never echo tokens. Scrub PII if exporting logs.
+11. **Lint & CI.** `golangci-lint` required. PRs must pass `go vet`, `go test`, lint.
+12. **Docs.** Every exported symbol has GoDoc. Each package has a `README.md` snippet with examples.
+
+## Audio specifics
+
+- PCM format: 48 kHz, 16‑bit, mono little‑endian. Convert everything to this canonical form.
+- Silence detection order:
+  1. Opus comfort‑noise marker boundary.
+  2. WebRTC VAD state.
+  3. RMS fallback threshold.
+- Default window: 5 s, min utterance: 0.5 s, max gap inside utterance: 350 ms.
+
+## STT specifics
+
+- Vosk recognizers are **not** reused across goroutines. Create per‑worker instances.
+- Deepgram requests include `diarize`, `punctuate`, `utterances` when posting chunks; stitch `utterances` back to transcript.
+- Retries: exponential backoff with cap 5 attempts; classify errors as retryable vs terminal.
+
+## Summarisation specifics
+
+- Prompt templates live in code with version tags; include `model`, `template_version`, and `transcript_hash` in the notes front‑matter.
+- For transcripts > model limit, run map‑reduce: per‑chunk notes → merge pass → final synthesis.
+- Always ask for Markdown; never raw HTML.
+
+## Performance targets (initial)
+
+- Cloud STT partial caption latency: **< 1.5 s** median.
+- Local Vosk chunk latency on CPU: **≤ chunk_length × 2** at worst.
+- End‑to‑end notes delivery after `!leave`: **< 20 s** for 10‑minute session (Deepgram + Gemini Flash).
