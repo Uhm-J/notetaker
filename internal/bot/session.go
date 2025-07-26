@@ -193,7 +193,7 @@ func (vs *VoiceSession) processAudio(packet *discordgo.Packet) {
 
 	// Get current speakers for this SSRC
 	speakers := vs.getCurrentSpeakers(packet.SSRC)
-	
+
 	log.Info().
 		Str("session_id", vs.ID).
 		Uint32("ssrc", packet.SSRC).
