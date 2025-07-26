@@ -39,6 +39,7 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 	session.Identify.Intents = discordgo.IntentsGuilds |
 		discordgo.IntentsGuildMessages |
 		discordgo.IntentsGuildVoiceStates |
+		discordgo.IntentsGuildMembers |
 		discordgo.IntentsMessageContent
 
 	// Create store
