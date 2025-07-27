@@ -17,7 +17,7 @@ A complete **Discord voice recording and transcription bot** written in Go that:
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Discord Bot   │    │  Audio Pipeline  │    │ STT Processing  │
 │                 │    │                  │    │                 │
-│ • !join/!leave  │───▶│ • Opus Decoder   │───▶│ • Vosk (Local)  │
+│ • !join/!stop   │───▶│ • Opus Decoder   │───▶│ • Vosk (Local)  │
 │ • Voice Conn    │    │ • VAD Detection  │    │ • Deepgram API  │
 │ • Session Mgmt  │    │ • Audio Chunker  │    │ • Worker Pool   │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
@@ -73,7 +73,7 @@ discord-notetaker/
 ## 🔧 Core Components
 
 ### 1. **Discord Bot** (`internal/bot/`)
-- **Commands**: `!join` and `!leave` 
+- **Commands**: `!join`, `!stop`, `!mode`, `!retry`
 - **Voice Connection**: Handles Discord voice channel joining/leaving
 - **Session Management**: Tracks active recording sessions per guild
 - **File Upload**: Sends transcripts and notes to Discord channels

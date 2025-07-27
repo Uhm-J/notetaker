@@ -450,7 +450,7 @@ func (vs *VoiceSession) Stop() error {
 	return nil
 }
 
-func (vs *VoiceSession) Finalize() (string, string, error) {
+func (vs *VoiceSession) Finalize(mode string) (string, string, error) {
 	vs.mutex.RLock()
 	utterances := make([]audio.Utterance, len(vs.utterances))
 	copy(utterances, vs.utterances)
@@ -511,7 +511,7 @@ func (vs *VoiceSession) Finalize() (string, string, error) {
 	// Generate and save notes
 	// Use a fresh context for summarization since the session context may be cancelled
 	summaryCtx := context.Background()
-	notes, err := vs.summariser.Summarise(summaryCtx, utterances)
+	notes, err := vs.summariser.Summarise(summaryCtx, utterances, mode)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate notes: %w", err)
 	}

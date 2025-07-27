@@ -29,7 +29,7 @@ func NewGeminiSummariser(apiKey, model string) (*GeminiSummariser, error) {
 	}, nil
 }
 
-func (g *GeminiSummariser) Summarise(ctx context.Context, utterances []audio.Utterance) (string, error) {
+func (g *GeminiSummariser) Summarise(ctx context.Context, utterances []audio.Utterance, mode string) (string, error) {
 	if len(utterances) == 0 {
 		return "# Meeting Notes\n\nNo transcript available.", nil
 	}
@@ -38,7 +38,7 @@ func (g *GeminiSummariser) Summarise(ctx context.Context, utterances []audio.Utt
 	transcript := g.buildTranscript(utterances)
 
 	// Generate summary using Gemini
-	prompt := g.buildPrompt(transcript)
+	prompt := g.buildPrompt(transcript, mode)
 
 	genModel := g.client.GenerativeModel(g.model)
 	resp, err := genModel.GenerateContent(ctx, genai.Text(prompt))
@@ -82,8 +82,22 @@ func (g *GeminiSummariser) buildTranscript(utterances []audio.Utterance) string 
 	return transcript.String()
 }
 
-func (g *GeminiSummariser) buildPrompt(transcript string) string {
-	return fmt.Sprintf(`You are a meeting notetaker. Given a diarized transcript with timestamps, produce:
+func (g *GeminiSummariser) buildPrompt(transcript, mode string) string {
+	var style string
+	switch mode {
+	case "brief":
+		style = "Be extremely concise. Only capture the most important points."
+	case "verbose":
+		style = "Provide a very detailed summary with as much context as possible."
+	case "casual":
+		style = "Use a friendly and informal tone in the notes."
+	case "formal":
+		style = "Use a very formal tone when writing the notes."
+	default:
+		style = "Be concise but comprehensive."
+	}
+
+	return fmt.Sprintf(`You are a meeting notetaker. %s Given a diarized transcript with timestamps, produce:
 
 1) **Summary** - bullet point summary (max 12 bullets)
 2) **Decisions** - key decisions made during the meeting
@@ -91,12 +105,12 @@ func (g *GeminiSummariser) buildPrompt(transcript string) string {
 4) **Open Questions** - unresolved questions or topics
 5) **Key References** - important references with timestamps
 
-Format the output as clean Markdown. Be concise but comprehensive.
+Format the output as clean Markdown. %s
 
 **TRANSCRIPT:**
 %s
 
-**MEETING NOTES:**`, transcript)
+**MEETING NOTES:**`, style, style, transcript)
 }
 
 func (g *GeminiSummariser) Close() error {
