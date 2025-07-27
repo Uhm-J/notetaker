@@ -78,7 +78,9 @@
 ### Commands
 
 - `!join` - Join your current voice channel and start recording
-- `!leave` - Stop recording and generate notes
+- `!stop` - Stop recording and generate notes
+- `!mode <name>` - Change summary style
+- `!retry [mode]` - Retry summarisation with optional mode
 
 ### Example Flow
 
@@ -86,8 +88,9 @@
 2. Type `!join` in a text channel
 3. The bot joins and starts recording
 4. Have your meeting/conversation
-5. Type `!leave` when done
-6. Bot processes the audio and posts transcript + notes
+5. Type `!stop` when done
+6. Optionally run `!retry brief` (or another mode) to regenerate notes
+7. Bot processes the audio and posts transcript + notes
 
 ## Configuration Options
 

@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -26,6 +27,11 @@ type Bot struct {
 	// Active sessions
 	sessions map[string]*VoiceSession
 	mutex    sync.RWMutex
+
+	// summarisation
+	mode        string
+	completed   map[string]string // sessionID -> transcript path
+	lastSession map[string]string // guildID -> sessionID
 }
 
 func NewBot(cfg *config.Config) (*Bot, error) {
@@ -75,6 +81,9 @@ func NewBot(cfg *config.Config) (*Bot, error) {
 		summariser:  summariser,
 		transcriber: transcriber,
 		sessions:    make(map[string]*VoiceSession),
+		mode:        "default",
+		completed:   make(map[string]string),
+		lastSession: make(map[string]string),
 	}
 
 	// Register handlers
@@ -141,8 +150,16 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	switch {
 	case strings.HasPrefix(content, "!join"):
 		b.handleJoin(s, m)
+	case strings.HasPrefix(content, "!stop"):
+		b.handleStop(s, m)
 	case strings.HasPrefix(content, "!leave"):
-		b.handleLeave(s, m)
+		b.handleStop(s, m)
+	case strings.HasPrefix(content, "!mode"):
+		b.handleMode(s, m)
+	case strings.HasPrefix(content, "!retry"):
+		b.handleRetry(s, m)
+	case strings.HasPrefix(content, "!help"):
+		b.handleHelp(s, m)
 	}
 }
 
@@ -229,7 +246,7 @@ func (b *Bot) handleJoin(s *discordgo.Session, m *discordgo.MessageCreate) {
 	b.mutex.Unlock()
 
 	// Send confirmation
-	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("🎙️ Started recording in <#%s>. Use `!leave` to stop.", voiceChannelID))
+	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("🎙️ Started recording in <#%s>. Use `!stop` to end.", voiceChannelID))
 
 	log.Info().
 		Str("session_id", sessionID).
@@ -239,7 +256,7 @@ func (b *Bot) handleJoin(s *discordgo.Session, m *discordgo.MessageCreate) {
 		Msg("Started voice recording session")
 }
 
-func (b *Bot) handleLeave(s *discordgo.Session, m *discordgo.MessageCreate) {
+func (b *Bot) handleStop(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Find active session in this guild
 	b.mutex.RLock()
 	var session *VoiceSession
@@ -271,7 +288,7 @@ func (b *Bot) handleLeave(s *discordgo.Session, m *discordgo.MessageCreate) {
 	processingMsg, _ := s.ChannelMessageSend(m.ChannelID, "⏳ Processing recording and generating notes...")
 
 	// Finalize and save
-	transcriptPath, notesPath, err := session.Finalize()
+	transcriptPath, notesPath, err := session.Finalize(b.mode)
 	if err != nil {
 		b.sendError(s, m.ChannelID, fmt.Sprintf("Failed to process recording: %v", err))
 		return
@@ -279,6 +296,12 @@ func (b *Bot) handleLeave(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	// Update message
 	s.ChannelMessageEdit(m.ChannelID, processingMsg.ID, "✅ Recording processed!")
+
+	// Record completed session for retry
+	b.mutex.Lock()
+	b.completed[session.ID] = transcriptPath
+	b.lastSession[m.GuildID] = session.ID
+	b.mutex.Unlock()
 
 	// Send files
 	b.sendFiles(s, m.ChannelID, transcriptPath, notesPath)
@@ -329,4 +352,69 @@ func (b *Bot) sendFiles(s *discordgo.Session, channelID, transcriptPath, notesPa
 	if err != nil {
 		b.sendError(s, channelID, "Failed to send files")
 	}
+}
+
+func (b *Bot) handleMode(s *discordgo.Session, m *discordgo.MessageCreate) {
+	parts := strings.Fields(m.Content)
+	if len(parts) < 2 {
+		b.sendError(s, m.ChannelID, "Usage: !mode <brief|verbose|casual|formal>")
+		return
+	}
+
+	mode := parts[1]
+	b.mutex.Lock()
+	b.mode = mode
+	b.mutex.Unlock()
+
+	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("✅ Mode set to '%s'", mode))
+	log.Info().Str("mode", mode).Msg("Set summarisation mode")
+}
+
+func (b *Bot) handleRetry(s *discordgo.Session, m *discordgo.MessageCreate) {
+	parts := strings.Fields(m.Content)
+	mode := b.mode
+	if len(parts) >= 2 {
+		mode = parts[1]
+	}
+
+	b.mutex.RLock()
+	sessionID := b.lastSession[m.GuildID]
+	transcriptPath := b.completed[sessionID]
+	b.mutex.RUnlock()
+
+	if transcriptPath == "" {
+		b.sendError(s, m.ChannelID, "No previous transcript to retry")
+		return
+	}
+
+	utterances, err := b.store.LoadTranscript(sessionID)
+	if err != nil {
+		b.sendError(s, m.ChannelID, "Failed to load transcript")
+		return
+	}
+
+	notes, err := b.summariser.Summarise(context.Background(), utterances, mode)
+	if err != nil {
+		b.sendError(s, m.ChannelID, "Failed to generate notes")
+		return
+	}
+
+	notesPath, err := b.store.SaveNotes(sessionID+"_"+mode, notes)
+	if err != nil {
+		b.sendError(s, m.ChannelID, "Failed to save notes")
+		return
+	}
+
+	b.sendFiles(s, m.ChannelID, transcriptPath, notesPath)
+	log.Info().Str("session_id", sessionID).Str("mode", mode).Msg("Retried summarisation")
+}
+
+func (b *Bot) handleHelp(s *discordgo.Session, m *discordgo.MessageCreate) {
+	help := "Available commands:\n" +
+		"!join - start recording\n" +
+		"!stop - stop and summarise\n" +
+		"!mode <name> - set summarisation style\n" +
+		"!retry [mode] - regenerate notes with optional mode\n" +
+		"!help - show this message"
+	s.ChannelMessageSend(m.ChannelID, help)
 }

@@ -14,7 +14,9 @@ Summaries/notes are generated with **Gemini Flash** via Google’s Gen AI Go SDK
 ## Feature set
 
 - `!join` — join the caller’s voice channel, play a chime, begin capture & live partial captions (optional).
-- `!leave` — stop capture; flush outstanding chunks; post transcript + notes.
+- `!stop` — stop capture; flush outstanding chunks; post transcript + notes.
+- `!mode` — set summary style (`brief`, `verbose`, `casual`, `formal`).
+- `!retry` — regenerate notes with an optional mode.
 - Chunked processing (default **5 s** windows, overlap 300 ms) to amortize latency and enable incremental notes.
 - Diarization: per‑user tagging from Discord voice state + (optionally) STT diarization to resolve overlaps.
 - Resilience: back‑pressure on the STT worker pool, automatic reconnect, graceful shutdown.
@@ -106,10 +108,14 @@ MAX_PARALLEL_STT=4
   3. Play chime via Opus writer.
   4. Begin chunker + STT workers.
 
-- `!leave`
+- `!stop`
   1. Stop capture; close chunker; wait for workers to drain.
   2. Finalize transcript JSONL and call Gemini to produce notes.
   3. Upload transcript (`.jsonl`) and notes (`.md`) to the text channel.
+- `!mode`
+  1. Change how concise or formal the notes are.
+- `!retry`
+  1. Reprocess the latest transcript with the current or given mode.
 
 ---
 
@@ -173,7 +179,7 @@ go mod tidy
 GOOS=$(go env GOOS) GOARCH=$(go env GOARCH) go run ./cmd/discord-notetaker
 ```
 
-Invite bot and use `!join` / `!leave` in a text channel.
+Invite bot and use `!join` / `!stop` in a text channel. Use `!help` for all commands.
 
 ---
 
