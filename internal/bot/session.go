@@ -119,7 +119,7 @@ func (vs *VoiceSession) Start() error {
 
 	// CRITICAL: Send initial speaking state to Discord to establish SSRC mapping
 	// This is required according to Discord documentation before receiving audio
-	err = vs.voiceConn.Speaking(false)
+	err = vs.voiceConn.Speaking(true)
 	if err != nil {
 		log.Warn().
 			Str("session_id", vs.ID).
